@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Any
 
 from handlers.calllog_handler import build_call_log_payload, post_call_log_with_retry
+from handlers.langfuse_handler import log_call_trace
 from utils.logger import logger, redact_sensitive
 
 
@@ -52,3 +53,13 @@ class CallFinalizer:
                 payload["metadata"]["retentionDays"] = self._config.get("retention_days")
             await self._post_call_log(payload)
             logger.info("[CALL_LOG] finalized call {}", redact_sensitive({"callId": payload["callId"]}))
+
+            if zero_pii_retention:
+                logger.info(
+                    "[langfuse] skipped trace for call {} (zero_pii_retention enabled)",
+                    redact_sensitive({"callId": payload["callId"]}),
+                )
+            else:
+                # Best-effort and non-raising: log_call_trace must never delay
+                # or block call-log delivery, which already happened above.
+                log_call_trace(payload)
