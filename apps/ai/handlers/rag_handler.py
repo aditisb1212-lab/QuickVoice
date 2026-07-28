@@ -9,6 +9,7 @@ import time
 from utils.metrics import emit_metric
 from utils.logger import logger, redact_sensitive
 from utils.pinecone_client import pinecone_client, pinecone_host
+from handlers.langfuse_handler import log_retrieval_span
 
 
 class RagRetrievalError(RuntimeError):
@@ -90,6 +91,13 @@ async def get_rag_context(agent_id: str, query: str, top_k: int = 5) -> str:
                 latency_ms=int((time.perf_counter() - started) * 1000),
             )
             logger.info("[rag] miss {}", redact_sensitive({"agent": agent_id, "top_k": top_k}))
+            log_retrieval_span(
+                agent_id=agent_id,
+                query=query,
+                status="miss",
+                matches=0,
+                latency_ms=int((time.perf_counter() - started) * 1000),
+            )
             return ""
 
         parts = []
@@ -122,6 +130,13 @@ async def get_rag_context(agent_id: str, query: str, top_k: int = 5) -> str:
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
         logger.info("[rag] hit {}", redact_sensitive({"agent": agent_id, "matches": len(parts)}))
+        log_retrieval_span(
+            agent_id=agent_id,
+            query=query,
+            status="hit",
+            matches=len(parts),
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
         return "\n\n---\n\n".join(parts)
 
     except Exception as exc:
@@ -133,6 +148,13 @@ async def get_rag_context(agent_id: str, query: str, top_k: int = 5) -> str:
             latency_ms=int((time.perf_counter() - started) * 1000),
         )
         logger.warning("[rag] retrieval failed {}", redact_sensitive({"agent": agent_id, "error": str(exc)}))
+        log_retrieval_span(
+            agent_id=agent_id,
+            query=query,
+            status="error",
+            matches=0,
+            latency_ms=int((time.perf_counter() - started) * 1000),
+        )
         raise RagRetrievalError("Knowledge base retrieval failed") from exc
 
 
